@@ -2,30 +2,65 @@
 <html>
 <head>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <title>Proyek AR Kesehatan</title>
+
+    <title>Mindful Breathing AR Guide</title>
 </head>
 <body style='margin : 0px; overflow: hidden;'>
 
     <a-scene embedded
-        arjs='sourceType: webcam; detectionMode: mono; cameraParametersUrl: https://raw.githack.com/AR-js-org/AR.js/master/data/camera_para.dat; debugUIEnabled: false;'>
+        arjs='sourceType: webcam; 
+              detectionMode: color_and_size; 
+              cameraParametersUrl: https://raw.githack.com/AR-js-org/AR.js/master/data/camera_para.dat; 
+              debugUIEnabled: false;'>
 
-        <a-marker preset='hiro'>
+        <a-entity cursor="rayOrigin: mouse" raycaster="objects: .raycastable">
+            <a-entity ar-hit-test="doRun: true" class="raycastable">
+            
+                <a-sphere position='0 0 0' 
+                          radius="0.2" 
+                          material='color: #4CAF50; opacity: 0.8;' 
+                          shadow>
+                    
+                    <a-animation attribute="scale"
+                                 direction="alternate"
+                                 dur="4000"          
+                                 from="1 1 1"
+                                 to="2 2 2"
+                                 easing="ease-in-out">
+                    </a-animation>
+                    
+                    <a-animation attribute="scale"
+                                 begin="4000"        
+                                 direction="alternate"
+                                 dur="6000"          
+                                 from="2 2 2"
+                                 to="1 1 1"
+                                 easing="ease-in-out"
+                                 repeat="indefinite">
+                    </a-animation>
+                </a-sphere>
 
-            <a-sphere position='0 0.5 0' radius="0.3" material='color: #4CAF50;'>
-                <a-animation attribute="scale"
-                             direction="alternate"
-                             dur="4000"
-                             to="1.5 1.5 1.5"
-                             repeat="indefinite">
-                </a-animation>
-            </a-sphere>
+                <a-text value="INHALE: 4s | EXHALE: 6s" 
+                        align="center" 
+                        position="0 0.5 0" 
+                        color="#333" 
+                        scale="0.5 0.5 0.5">
+                </a-text>
 
-            <a-text value="Tarik Napas (4s) dan Buang (4s)" align="center" position="0 1.2 0" color="black" scale="1 1 1"></a-text>
+            </a-entity>
+        </a-entity>
 
-        </a-marker>
+        <a-entity camera>
+            <a-text value="Point camera at a flat surface and TAP to place the guide." 
+                    align="center" 
+                    position="0 0 -1" 
+                    color="white" 
+                    scale="0.3 0.3 0.3">
+            </a-text>
+        </a-entity>
 
-        <a-entity camera></a-entity>
     </a-scene>
 </body>
 </html>
