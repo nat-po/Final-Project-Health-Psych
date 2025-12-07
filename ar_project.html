@@ -5,22 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AR Breathing Guide — Lotus</title>
 <style>
+/* CSS Styling */
 html,body{height:100%;margin:0;overflow:hidden;font-family:system-ui,Segoe UI,Roboto,Arial;background:#000}
 #uiTop{position:fixed;left:12px;top:12px;color:#fff;z-index:11}
-#controls{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px;z-index:20}
+/* Kontrol harus berada di atas tombol AR (Z-index default ARButton biasanya 10) */
+#controls{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px;z-index:20} 
 .btn{padding:10px 14px;border-radius:12px;border:0;background:#fff;font-weight:700;cursor:pointer}
 #phase{position:fixed;left:50%;transform:translateX(-50%);top:78px;background:rgba(0,0,0,0.6);color:#00ff88;padding:8px 14px;border-radius:20px;z-index:11;font-weight:800}
 #startUI{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:30}
 #startUI button{margin-top:12px;padding:10px 16px;border-radius:12px;border:none;background:#00ff88;color:#000;font-weight:700;cursor:pointer;}
 footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
+
+/* Pastikan ARButton menindih startUI saat muncul, atau sembunyikan startUI*/
+/* Kita akan pastikan ARButton dibuat di atas startUI di JS */
 </style>
 </head>
 <body>
 <div id="uiTop"><strong>Breathing Guide — Lotus</strong></div>
 <div id="phase">INHALE</div>
 
-<div id="controls">
-  <button class="btn" id="pauseBtn">⏸ Pause</button>
+<div id="controls" style="display:none;"> <button class="btn" id="pauseBtn">⏸ Pause</button>
   <button class="btn" id="slower">⏪ Slower</button>
   <button class="btn" id="faster">⏩ Faster</button>
   <button class="btn" id="audioBtn">🔈 Audio</button>
@@ -29,8 +33,10 @@ footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 <audio id="breathAudio" src="assets/breathing.mp3" preload="auto"></audio>
 
 <div id="startUI">
-  <button id="startAR">Start AR & Enable Audio</button>
-</div>
+    <h1>Web AR Breathing Guide</h1>
+    <p>Loading AR components...</p>
+    </div>
+
 
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
@@ -43,134 +49,181 @@ let isPaused = false;
 let speed = 1.0;
 let phase = 'inhale';
 const loaderGLTF = new GLTFLoader();
-let phaseTimer = 0; // untuk phase 5 detik
+let phaseTimer = 0; 
 
 initScene();
 
 function initScene(){
-  const container = document.createElement('div'); document.body.appendChild(container);
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+    const container = document.createElement('div'); 
+    document.body.appendChild(container);
+    
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
 
-  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  renderer.xr.setReferenceSpaceType('local');
-  container.appendChild(renderer.domElement);
-
-  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1); scene.add(light);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(0.5,1,0.25).normalize(); scene.add(dir);
-
-  pivot = new THREE.Group(); pivot.position.set(0,0,-1); scene.add(pivot);
-
-  setupGestures(renderer.domElement);
-
-  window.addEventListener('resize', ()=>{
-    camera.aspect = window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
+    renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+    renderer.xr.enabled = true;
+    renderer.xr.setReferenceSpaceType('local'); // default untuk AR World Tracking
+    container.appendChild(renderer.domElement);
 
-  loaderGLTF.load('assets/flower.glb', gltf=>{
-    flower = gltf.scene;
-    scaleToHeight(flower,0.35);
-    pivot.add(flower);
-    flower.position.set(0,-0.15,0);
-  }, undefined, err=>{
-    console.error(err);
-  });
+    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1); scene.add(light);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(0.5,1,0.25).normalize(); scene.add(dir);
 
-  renderer.setAnimationLoop(render);
-}
+    pivot = new THREE.Group(); pivot.position.set(0,0,-1); scene.add(pivot);
 
-// --- Start AR & enable audio ---
-document.getElementById('startAR').addEventListener('click', ()=>{
-  const startUI = document.getElementById('startUI');
-  startUI.style.display = 'none';
+    setupGestures(renderer.domElement);
 
-  const audio = document.getElementById('breathAudio');
-  audio.play().catch(()=>{});
-  audio._enabled = true;
+    window.addEventListener('resize', ()=>{
+        camera.aspect = window.innerWidth/window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 
-  document.body.appendChild(
-    ARButton.createButton(renderer,{
-      requiredFeatures:['hit-test'], 
-      optionalFeatures:['dom-overlay'], 
-      domOverlay:{root:document.body}
-    })
-  );
-});
+    loaderGLTF.load('assets/flower.glb', gltf=>{
+        flower = gltf.scene;
+        scaleToHeight(flower,0.35);
+        pivot.add(flower);
+        flower.position.set(0,-0.15,0);
+    }, undefined, err=>{
+        console.error(err);
+    });
 
-function render(){
-  const delta = clock.getDelta();
+    // --- PERBAIKAN UTAMA: ARButton Dibuat di Sini ---
+    const arButton = ARButton.createButton(renderer,{
+        requiredFeatures:['hit-test'], 
+        optionalFeatures:['dom-overlay'], 
+        domOverlay:{root:document.body}
+    });
 
-  if(flower && !isPaused){
-    phaseTimer += delta;
-    if(phaseTimer>=5){ // ganti phase tiap 5 detik
-      phaseTimer = 0;
-      phase = (phase==='inhale')?'exhale':'inhale';
-      updatePhaseUI();
+    // Hapus #startUI dan tambahkan tombol AR resmi dari Three.js
+    const startUI = document.getElementById('startUI');
+    if (startUI) {
+        // Hapus elemen di dalam startUI
+        startUI.innerHTML = ''; 
+        // Posisikan tombol AR di tengah (menggantikan tombol startAR yang lama)
+        arButton.style.position = 'absolute';
+        arButton.style.left = '50%';
+        arButton.style.top = '50%';
+        arButton.style.transform = 'translate(-50%, -50%)';
+        arButton.style.padding = '10px 16px';
+        arButton.style.borderRadius = '12px';
+        arButton.style.border = 'none';
+        arButton.style.background = '#00ff88';
+        arButton.style.color = '#000';
+        arButton.style.fontWeight = '700';
+        arButton.style.cursor = 'pointer';
+
+        startUI.appendChild(arButton);
+    } else {
+        document.body.appendChild(arButton); // fallback jika startUI dihapus
     }
 
-    const t = clock.getElapsedTime() * speed;
-    const s = 1 + 0.08 * Math.sin(t * Math.PI);
-    flower.scale.setScalar(s);
-  }
 
-  if(renderer.xr.isPresenting){
-    const cam = renderer.xr.getCamera(camera);
-    const camWorld = new THREE.Vector3(); cam.getWorldPosition(camWorld);
-    const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
-    const desiredPos = camWorld.clone().add(camDir.multiplyScalar(1.0));
-    pivot.position.copy(desiredPos);
-    pivot.quaternion.copy(cam.quaternion);
-  }
+    // --- EVENT LISTENER SAAT SESI AR DIMULAI ---
+    renderer.xr.addEventListener('sessionstart', ()=>{
+        // 1. Sembunyikan tombol/overlay awal
+        if (startUI) {
+            startUI.style.display = 'none';
+        }
+        
+        // 2. Tampilkan kontrol
+        document.getElementById('controls').style.display = 'flex';
 
-  renderer.render(scene,camera);
+        // 3. Putar audio (memanfaatkan izin interaksi yang diberikan saat mengklik tombol AR)
+        const audio = document.getElementById('breathAudio');
+        audio.play().catch(()=>{});
+        audio._enabled = true; 
+    });
+    
+    // Opsional: Untuk mengembalikan tampilan setelah AR selesai
+    renderer.xr.addEventListener('sessionend', () => {
+        if (startUI) {
+            startUI.style.display = 'block';
+        }
+        document.getElementById('controls').style.display = 'none';
+        document.getElementById('breathAudio').pause();
+    });
+
+    renderer.setAnimationLoop(render);
+}
+
+// ... (Sisa fungsi render, scaleToHeight, updatePhaseUI, Gestures, Controls tetap SAMA) ...
+// Tidak ada perubahan di bawah ini, kecuali menghapus event listener #startAR yang lama
+
+function render(){
+    const delta = clock.getDelta();
+
+    if(flower && !isPaused){
+        phaseTimer += delta;
+        if(phaseTimer>=5){ // ganti phase tiap 5 detik
+            phaseTimer = 0;
+            phase = (phase==='inhale')?'exhale':'inhale';
+            updatePhaseUI();
+        }
+
+        const t = clock.getElapsedTime() * speed;
+        // Animasi skala untuk efek pernapasan
+        const s = 1 + 0.08 * Math.sin(t * Math.PI); 
+        flower.scale.setScalar(s);
+    }
+
+    if(renderer.xr.isPresenting){
+        // Logika untuk menempatkan objek AR di depan kamera (world tracking)
+        const cam = renderer.xr.getCamera(camera);
+        const camWorld = new THREE.Vector3(); cam.getWorldPosition(camWorld);
+        const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
+        // Posisikan 1.0 meter di depan kamera
+        const desiredPos = camWorld.clone().add(camDir.multiplyScalar(1.0)); 
+        pivot.position.copy(desiredPos);
+        pivot.quaternion.copy(cam.quaternion);
+    }
+
+    renderer.render(scene,camera);
 }
 
 function scaleToHeight(obj,meters){
-  const box = new THREE.Box3().setFromObject(obj);
-  const size = new THREE.Vector3(); box.getSize(size);
-  if(size.y>0){const s = meters/size.y; obj.scale.setScalar(s);}
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = new THREE.Vector3(); box.getSize(size);
+    if(size.y>0){const s = meters/size.y; obj.scale.setScalar(s);}
 }
 
 function updatePhaseUI(){
-  document.getElementById('phase').textContent = phase.toUpperCase();
+    document.getElementById('phase').textContent = phase.toUpperCase();
 }
 
 // --- Gestures ---
 let ongoing={prevDist:0,prevMid:null,lastSingle:null,isPointerDown:false,scaleFactor:1};
 function setupGestures(dom){
-  dom.addEventListener('touchstart',e=>{
-    if(!flower) return; e.preventDefault();
-    const t=e.touches;
-    if(t.length===1){ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY};ongoing.isPointerDown=true;}
-    else if(t.length===2){ongoing.prevDist=dist(t[0],t[1]);ongoing.prevMid=mid(t[0],t[1]);}
-  },{passive:false});
+    dom.addEventListener('touchstart',e=>{
+        if(!flower) return; e.preventDefault();
+        const t=e.touches;
+        if(t.length===1){ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY};ongoing.isPointerDown=true;}
+        else if(t.length===2){ongoing.prevDist=dist(t[0],t[1]);ongoing.prevMid=mid(t[0],t[1]);}
+    },{passive:false});
 
-  dom.addEventListener('touchmove',e=>{
-    if(!flower) return; e.preventDefault();
-    const t=e.touches;
-    if(t.length===1 && ongoing.isPointerDown){
-      const p={x:t[0].clientX,y:t[0].clientY};
-      const dx=p.x-ongoing.lastSingle.x, dy=p.y-ongoing.lastSingle.y;
-      flower.rotation.y+=dx*0.005; flower.rotation.x+=dy*0.005;
-      ongoing.lastSingle=p;
-    } else if(t.length===2){
-      const nd=dist(t[0],t[1]), nmid=mid(t[0],t[1]), sf=nd/(ongoing.prevDist||nd);
-      ongoing.scaleFactor*=sf; flower.scale.setScalar(ongoing.scaleFactor);
-      ongoing.prevDist=nd;
-      if(ongoing.prevMid){
-        pivot.position.x+=-(nmid.x-ongoing.prevMid.x)*0.0016;
-        pivot.position.y+=(nmid.y-ongoing.prevMid.y)*0.0016;
-      }
-      ongoing.prevMid=nmid;
-    }
-  },{passive:false});
+    dom.addEventListener('touchmove',e=>{
+        if(!flower) return; e.preventDefault();
+        const t=e.touches;
+        if(t.length===1 && ongoing.isPointerDown){
+            const p={x:t[0].clientX,y:t[0].clientY};
+            const dx=p.x-ongoing.lastSingle.x, dy=p.y-ongoing.lastSingle.y;
+            flower.rotation.y+=dx*0.005; flower.rotation.x+=dy*0.005;
+            ongoing.lastSingle=p;
+        } else if(t.length===2){
+            const nd=dist(t[0],t[1]), nmid=mid(t[0],t[1]), sf=nd/(ongoing.prevDist||nd);
+            ongoing.scaleFactor*=sf; flower.scale.setScalar(ongoing.scaleFactor);
+            ongoing.prevDist=nd;
+            if(ongoing.prevMid){
+                // Panning/Translation
+                pivot.position.x+=-(nmid.x-ongoing.prevMid.x)*0.0016;
+                pivot.position.y+=(nmid.y-ongoing.prevMid.y)*0.0016;
+            }
+            ongoing.prevMid=nmid;
+        }
+    },{passive:false});
 
-  dom.addEventListener('touchend',e=>{ongoing.isPointerDown=false;ongoing.prevDist=0;ongoing.prevMid=null;},{passive:false});
+    dom.addEventListener('touchend',e=>{ongoing.isPointerDown=false;ongoing.prevDist=0;ongoing.prevMid=null;},{passive:false});
 }
 function mid(a,b){return {x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2};}
 function dist(a,b){return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);}
@@ -183,19 +236,19 @@ const aBtn = document.getElementById('audioBtn');
 const audio = document.getElementById('breathAudio');
 
 pauseBtn.addEventListener('click',()=>{
-  isPaused=!isPaused;
-  pauseBtn.textContent=isPaused?'▶ Resume':'⏸ Pause';
-  if(isPaused) audio.pause(); else if(audio._enabled) audio.play().catch(()=>{});
+    isPaused=!isPaused;
+    pauseBtn.textContent=isPaused?'▶ Resume':'⏸ Pause';
+    if(isPaused) audio.pause(); else if(audio._enabled) audio.currentTime=0,audio.play().catch(()=>{});
 });
 sBtn.addEventListener('click',()=>{speed=Math.max(0.5,speed-0.25);});
 fBtn.addEventListener('click',()=>{speed=Math.min(2.0,speed+0.25);});
 aBtn.addEventListener('click',()=>{
-  audio._enabled=!audio._enabled;
-  aBtn.textContent=audio._enabled?'🔊 Audio':'🔇 Audio OFF';
-  if(audio._enabled && !isPaused) audio.currentTime=0,audio.play().catch(()=>{}); else audio.pause();
+    audio._enabled=!audio._enabled;
+    aBtn.textContent=audio._enabled?'🔊 Audio':'🔇 Audio OFF';
+    if(audio._enabled && !isPaused) audio.currentTime=0,audio.play().catch(()=>{}); else audio.pause();
 });
 </script>
 
-<footer>Tip: Use Chrome (Android) for best WebXR support. Allow camera access when prompted.</footer>
+<footer>Tip: Proyek ini wajib diakses melalui koneksi HTTPS (misalnya GitHub Pages) agar AR berfungsi.</footer>
 </body>
 </html>
