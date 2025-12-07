@@ -10,15 +10,18 @@
   #controls{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px;z-index:11}
   .btn{padding:10px 14px;border-radius:12px;border:0;background:#fff;font-weight:700}
   #phase{position:fixed;left:50%;transform:translateX(-50%);top:78px;background:rgba(0,0,0,0.6);color:#00ff88;padding:8px 14px;border-radius:20px;z-index:11;font-weight:800}
-  #loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.6);color:white;padding:10px 14px;border-radius:8px;z-index:20;display:none}
-  #startAR{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);padding:14px 20px;font-size:18px;border-radius:12px;border:none;background:#00ff88;color:#000;z-index:15;cursor:pointer;}
+  #loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.6);color:white;padding:10px 14px;border-radius:8px;z-index:20;display:block;text-align:center;}
+  #startAR{margin-top:12px;padding:10px 16px;border-radius:12px;border:none;background:#00ff88;color:#000;font-weight:700;cursor:pointer;}
   footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 </style>
 </head>
 <body>
 <div id="uiTop"><strong>Breathing Guide — Lotus</strong></div>
 <div id="phase">INHALE</div>
-<div id="loader">Loading model…</div>
+<div id="loader">
+  Loading model…<br>
+  <button id="startAR">Start AR</button>
+</div>
 
 <div id="controls">
   <button class="btn" id="pauseBtn">⏸ Pause</button>
@@ -26,8 +29,6 @@
   <button class="btn" id="faster">⏩ Faster</button>
   <button class="btn" id="audioBtn">🔈 Audio</button>
 </div>
-
-<button id="startAR">Start AR</button>
 
 <audio id="breathAudio" src="assets/breathing.mp3" preload="auto"></audio>
 
@@ -43,15 +44,16 @@ let speed = 1.0;
 let phase = 'inhale';
 const loaderGLTF = new GLTFLoader();
 
-initBasicScene();
+// --- Initialize scene (without AR session yet) ---
+initScene();
 
-function initBasicScene(){
+function initScene(){
   const container = document.createElement('div'); document.body.appendChild(container);
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
 
   renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-  renderer.setPixelRatio(window.devicePixelRatio); 
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.xr.enabled = true;
   renderer.xr.setReferenceSpaceType('local');
@@ -60,24 +62,23 @@ function initBasicScene(){
   const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1); scene.add(light);
   const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(0.5,1,0.25).normalize(); scene.add(dir);
 
-  pivot = new THREE.Group(); pivot.position.set(0,0,-1); scene.add(pivot);
+  pivot = new THREE.Group(); scene.add(pivot);
 
   setupGestures(renderer.domElement);
-  window.addEventListener('resize', ()=>{ 
-    camera.aspect = window.innerWidth/window.innerHeight; 
-    camera.updateProjectionMatrix(); 
-    renderer.setSize(window.innerWidth, window.innerHeight); 
+
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // load flower model
-  document.getElementById('loader').style.display = 'block';
-  loaderGLTF.load('assets/flower.glb', gltf => {
+  // Load flower
+  loaderGLTF.load('assets/flower.glb', gltf=>{
     flower = gltf.scene;
-    scaleToHeight(flower, 0.35);
+    scaleToHeight(flower,0.35);
     pivot.add(flower);
     flower.position.set(0,-0.15,0);
-    document.getElementById('loader').style.display = 'none';
-  }, undefined, err => {
+  }, undefined, err=>{
     console.error(err);
     document.getElementById('loader').textContent = 'Failed to load flower.glb';
   });
@@ -87,19 +88,46 @@ function initBasicScene(){
 
 // --- Start AR button ---
 document.getElementById('startAR').addEventListener('click', ()=>{
-  document.body.removeChild(document.getElementById('startAR'));
+  const btn = document.getElementById('startAR');
+  btn.disabled = true; btn.textContent = 'Starting AR…';
+
   document.body.appendChild(
-    ARButton.createButton(renderer, {
-      requiredFeatures: ['hit-test'], // ini bikin browser minta izin kamera
-      optionalFeatures: ['dom-overlay'],
-      domOverlay: { root: document.body }
+    ARButton.createButton(renderer,{
+      requiredFeatures:['hit-test'], 
+      optionalFeatures:['dom-overlay'], 
+      domOverlay:{root:document.body}
     })
   );
+
+  // Hide loader after AR session started
+  const session = renderer.xr.getSession();
+  if(session){
+    document.getElementById('loader').style.display='none';
+  } else {
+    // Poll until session active
+    const check = setInterval(()=>{
+      if(renderer.xr.isPresenting){
+        document.getElementById('loader').style.display='none';
+        clearInterval(check);
+      }
+    },100);
+  }
 });
 
 // --- Render loop ---
 function render(){
-  if (renderer.xr.isPresenting){
+  if(flower && !isPaused && renderer.xr.isPresenting){
+    const t = clock.getElapsedTime() * speed;
+    const s = 1 + 0.08 * Math.sin(t * Math.PI);
+    flower.scale.setScalar(s);
+
+    const sinv = Math.sin(t * Math.PI);
+    const newPhase = sinv>0?'inhale':'exhale';
+    if(newPhase!==phase){phase=newPhase;updatePhaseUI();}
+  }
+
+  // Move pivot in front of camera if AR active
+  if(renderer.xr.isPresenting){
     const cam = renderer.xr.getCamera(camera);
     const camWorld = new THREE.Vector3(); cam.getWorldPosition(camWorld);
     const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
@@ -107,98 +135,81 @@ function render(){
     pivot.position.copy(desiredPos);
     pivot.quaternion.copy(cam.quaternion);
   } else {
-    pivot.position.set(0,0,-1); 
+    pivot.position.set(0,0,-1);
     pivot.quaternion.identity();
   }
 
-  if (flower && !isPaused){
-    const t = clock.getElapsedTime() * speed;
-    const s = 1 + 0.08 * Math.sin(t * Math.PI);
-    flower.scale.setScalar(s);
-
-    const sinv = Math.sin(t * Math.PI);
-    const newPhase = sinv > 0 ? 'inhale' : 'exhale';
-    if (newPhase !== phase){ phase = newPhase; updatePhaseUI(); }
-  }
-
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 
-function scaleToHeight(obj, meters){
+function scaleToHeight(obj,meters){
   const box = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3(); box.getSize(size);
-  if (size.y > 0){ const s = meters / size.y; obj.scale.setScalar(s); }
+  if(size.y>0){const s = meters/size.y; obj.scale.setScalar(s);}
 }
 
 function updatePhaseUI(){
   const el = document.getElementById('phase');
   el.textContent = phase.toUpperCase();
-  el.className = phase === 'inhale' ? 'inhaling' : 'exhaling';
+  el.className = phase==='inhale'?'inhaling':'exhaling';
 }
 
-// --- Gesture controls ---
-let ongoing = { prevDist:0, prevMid:null, lastSingle:null, isPointerDown:false, scaleFactor:1 };
+// --- Gestures ---
+let ongoing={prevDist:0,prevMid:null,lastSingle:null,isPointerDown:false,scaleFactor:1};
 function setupGestures(dom){
-  dom.addEventListener('touchstart', e => { 
-    if (!flower) return; e.preventDefault(); 
-    const t = e.touches; 
-    if (t.length === 1){ ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY}; ongoing.isPointerDown=true; } 
-    else if (t.length===2){ ongoing.prevDist = dist(t[0],t[1]); ongoing.prevMid = mid(t[0],t[1]); } 
-  }, {passive:false});
+  dom.addEventListener('touchstart',e=>{
+    if(!flower) return; e.preventDefault();
+    const t=e.touches;
+    if(t.length===1){ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY};ongoing.isPointerDown=true;}
+    else if(t.length===2){ongoing.prevDist=dist(t[0],t[1]);ongoing.prevMid=mid(t[0],t[1]);}
+  },{passive:false});
 
-  dom.addEventListener('touchmove', e => { 
-    if (!flower) return; e.preventDefault(); 
-    const t = e.touches; 
-    if (t.length===1 && ongoing.isPointerDown){ 
-      const p={x:t[0].clientX,y:t[0].clientY}; 
-      const dx = p.x - ongoing.lastSingle.x; const dy = p.y - ongoing.lastSingle.y; 
-      flower.rotation.y += dx*0.005; flower.rotation.x += dy*0.005; 
-      ongoing.lastSingle = p; 
-    } else if (t.length===2){ 
-      const nd = dist(t[0],t[1]); 
-      const nmid = mid(t[0],t[1]); 
-      const sf = nd/(ongoing.prevDist||nd); 
-      ongoing.scaleFactor *= sf; 
-      flower.scale.setScalar(ongoing.scaleFactor); 
-      ongoing.prevDist = nd; 
-      if (ongoing.prevMid){ 
-        const mdx = nmid.x - ongoing.prevMid.x; const mdy = nmid.y - ongoing.prevMid.y; 
-        const factor = 0.0016; 
-        pivot.position.x += -mdx * factor; 
-        pivot.position.y += mdy * factor; 
-      } 
-      ongoing.prevMid = nmid; 
-    } 
-  }, {passive:false});
+  dom.addEventListener('touchmove',e=>{
+    if(!flower) return; e.preventDefault();
+    const t=e.touches;
+    if(t.length===1 && ongoing.isPointerDown){
+      const p={x:t[0].clientX,y:t[0].clientY};
+      const dx=p.x-ongoing.lastSingle.x, dy=p.y-ongoing.lastSingle.y;
+      flower.rotation.y+=dx*0.005; flower.rotation.x+=dy*0.005;
+      ongoing.lastSingle=p;
+    } else if(t.length===2){
+      const nd=dist(t[0],t[1]), nmid=mid(t[0],t[1]), sf=nd/(ongoing.prevDist||nd);
+      ongoing.scaleFactor*=sf; flower.scale.setScalar(ongoing.scaleFactor);
+      ongoing.prevDist=nd;
+      if(ongoing.prevMid){
+        pivot.position.x+=-(nmid.x-ongoing.prevMid.x)*0.0016;
+        pivot.position.y+=(nmid.y-ongoing.prevMid.y)*0.0016;
+      }
+      ongoing.prevMid=nmid;
+    }
+  },{passive:false});
 
-  dom.addEventListener('touchend', e => { ongoing.isPointerDown=false; ongoing.prevDist=0; ongoing.prevMid=null; }, {passive:false});
+  dom.addEventListener('touchend',e=>{ongoing.isPointerDown=false;ongoing.prevDist=0;ongoing.prevMid=null;},{passive:false});
 }
+function mid(a,b){return {x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2};}
+function dist(a,b){return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);}
 
-function mid(a,b){ return {x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2}; }
-function dist(a,b){ const dx=a.clientX-b.clientX; const dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
-
-// --- Controls: pause, speed, audio ---
+// --- Controls ---
 const pauseBtn = document.getElementById('pauseBtn');
 const sBtn = document.getElementById('slower');
 const fBtn = document.getElementById('faster');
 const aBtn = document.getElementById('audioBtn');
 const audio = document.getElementById('breathAudio');
 
-pauseBtn.addEventListener('click', ()=>{
-  isPaused = !isPaused;
-  pauseBtn.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
-  if (isPaused) audio.pause(); else if (audio._enabled) audio.play().catch(()=>{});
+pauseBtn.addEventListener('click',()=>{
+  isPaused=!isPaused;
+  pauseBtn.textContent=isPaused?'▶ Resume':'⏸ Pause';
+  if(isPaused) audio.pause(); else if(audio._enabled) audio.play().catch(()=>{});
 });
-sBtn.addEventListener('click', ()=>{ speed = Math.max(0.5, speed - 0.25); });
-fBtn.addEventListener('click', ()=>{ speed = Math.min(2.0, speed + 0.25); });
-aBtn.addEventListener('click', ()=>{
-  audio._enabled = !audio._enabled;
-  aBtn.textContent = audio._enabled ? '🔊 Audio' : '🔇 Audio OFF';
-  if (audio._enabled && !isPaused) audio.currentTime = 0, audio.play().catch(()=>{});
-  else audio.pause();
+sBtn.addEventListener('click',()=>{speed=Math.max(0.5,speed-0.25);});
+fBtn.addEventListener('click',()=>{speed=Math.min(2.0,speed+0.25);});
+aBtn.addEventListener('click',()=>{
+  audio._enabled=!audio._enabled;
+  aBtn.textContent=audio._enabled?'🔊 Audio':'🔇 Audio OFF';
+  if(audio._enabled && !isPaused) audio.currentTime=0,audio.play().catch(()=>{}); else audio.pause();
 });
-
 </script>
+
 <footer>Tip: Use Chrome (Android) for best WebXR support. Allow camera access when prompted.</footer>
 </body>
 </html>
