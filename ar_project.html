@@ -1,8 +1,8 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AR Breathing Guide — Lotus</title>
 <style>
 html,body{height:100%;margin:0;overflow:hidden;font-family:system-ui,Segoe UI,Roboto,Arial;background:#000}
@@ -10,6 +10,8 @@ html,body{height:100%;margin:0;overflow:hidden;font-family:system-ui,Segoe UI,Ro
 #controls{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px;z-index:20}
 .btn{padding:10px 14px;border-radius:12px;border:0;background:#fff;font-weight:700;cursor:pointer}
 #phase{position:fixed;left:50%;transform:translateX(-50%);top:78px;background:rgba(0,0,0,0.6);color:#00ff88;padding:8px 14px;border-radius:20px;z-index:11;font-weight:800}
+#startUI{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:30}
+#startUI button{margin-top:12px;padding:10px 16px;border-radius:12px;border:none;background:#00ff88;color:#000;font-weight:700;cursor:pointer;}
 footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 </style>
 </head>
@@ -26,6 +28,10 @@ footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 
 <audio id="breathAudio" src="assets/breathing.mp3" preload="auto"></audio>
 
+<div id="startUI">
+  <button id="startAR">Start AR & Enable Audio</button>
+</div>
+
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
@@ -37,6 +43,7 @@ let isPaused = false;
 let speed = 1.0;
 let phase = 'inhale';
 const loaderGLTF = new GLTFLoader();
+let phaseTimer = 0; // untuk phase 5 detik
 
 initScene();
 
@@ -65,7 +72,6 @@ function initScene(){
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // Load flower
   loaderGLTF.load('assets/flower.glb', gltf=>{
     flower = gltf.scene;
     scaleToHeight(flower,0.35);
@@ -75,7 +81,18 @@ function initScene(){
     console.error(err);
   });
 
-  // ARButton auto-add to body
+  renderer.setAnimationLoop(render);
+}
+
+// --- Start AR & enable audio ---
+document.getElementById('startAR').addEventListener('click', ()=>{
+  const startUI = document.getElementById('startUI');
+  startUI.style.display = 'none';
+
+  const audio = document.getElementById('breathAudio');
+  audio.play().catch(()=>{});
+  audio._enabled = true;
+
   document.body.appendChild(
     ARButton.createButton(renderer,{
       requiredFeatures:['hit-test'], 
@@ -83,19 +100,22 @@ function initScene(){
       domOverlay:{root:document.body}
     })
   );
-
-  renderer.setAnimationLoop(render);
-}
+});
 
 function render(){
+  const delta = clock.getDelta();
+
   if(flower && !isPaused){
+    phaseTimer += delta;
+    if(phaseTimer>=5){ // ganti phase tiap 5 detik
+      phaseTimer = 0;
+      phase = (phase==='inhale')?'exhale':'inhale';
+      updatePhaseUI();
+    }
+
     const t = clock.getElapsedTime() * speed;
     const s = 1 + 0.08 * Math.sin(t * Math.PI);
     flower.scale.setScalar(s);
-
-    const sinv = Math.sin(t * Math.PI);
-    const newPhase = sinv>0?'inhale':'exhale';
-    if(newPhase!==phase){phase=newPhase;updatePhaseUI();}
   }
 
   if(renderer.xr.isPresenting){
@@ -117,9 +137,7 @@ function scaleToHeight(obj,meters){
 }
 
 function updatePhaseUI(){
-  const el = document.getElementById('phase');
-  el.textContent = phase.toUpperCase();
-  el.className = phase==='inhale'?'inhaling':'exhaling';
+  document.getElementById('phase').textContent = phase.toUpperCase();
 }
 
 // --- Gestures ---
