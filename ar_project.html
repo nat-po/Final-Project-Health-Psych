@@ -10,18 +10,12 @@ html,body{height:100%;margin:0;overflow:hidden;font-family:system-ui,Segoe UI,Ro
 #controls{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px;z-index:20}
 .btn{padding:10px 14px;border-radius:12px;border:0;background:#fff;font-weight:700;cursor:pointer}
 #phase{position:fixed;left:50%;transform:translateX(-50%);top:78px;background:rgba(0,0,0,0.6);color:#00ff88;padding:8px 14px;border-radius:20px;z-index:11;font-weight:800}
-#loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.7);color:white;padding:12px 16px;border-radius:8px;z-index:30;text-align:center;}
-#startAR{margin-top:12px;padding:10px 16px;border-radius:12px;border:none;background:#00ff88;color:#000;font-weight:700;cursor:pointer;}
 footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 </style>
 </head>
 <body>
 <div id="uiTop"><strong>Breathing Guide — Lotus</strong></div>
 <div id="phase">INHALE</div>
-<div id="loader">
-  Loading model…<br>
-  <button id="startAR">Start AR</button>
-</div>
 
 <div id="controls">
   <button class="btn" id="pauseBtn">⏸ Pause</button>
@@ -44,7 +38,6 @@ let speed = 1.0;
 let phase = 'inhale';
 const loaderGLTF = new GLTFLoader();
 
-// --- Initialize scene ---
 initScene();
 
 function initScene(){
@@ -78,20 +71,11 @@ function initScene(){
     scaleToHeight(flower,0.35);
     pivot.add(flower);
     flower.position.set(0,-0.15,0);
-    document.getElementById('loader').style.display='block'; // tetap show sampai AR start
   }, undefined, err=>{
     console.error(err);
-    document.getElementById('loader').textContent = 'Failed to load flower.glb';
   });
 
-  renderer.setAnimationLoop(render);
-}
-
-// --- Start AR button ---
-document.getElementById('startAR').addEventListener('click', ()=>{
-  const btn = document.getElementById('startAR');
-  btn.disabled = true; btn.textContent = 'Starting AR…';
-
+  // ARButton auto-add to body
   document.body.appendChild(
     ARButton.createButton(renderer,{
       requiredFeatures:['hit-test'], 
@@ -100,16 +84,9 @@ document.getElementById('startAR').addEventListener('click', ()=>{
     })
   );
 
-  // sembunyikan loader saat session aktif
-  const check = setInterval(()=>{
-    if(renderer.xr.isPresenting){
-      document.getElementById('loader').style.display='none';
-      clearInterval(check);
-    }
-  },100);
-});
+  renderer.setAnimationLoop(render);
+}
 
-// --- Render loop ---
 function render(){
   if(flower && !isPaused){
     const t = clock.getElapsedTime() * speed;
