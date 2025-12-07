@@ -9,7 +9,7 @@
   .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
   h1{font-size:22px;margin:0}
   p{opacity:0.85;margin:0}
-  .enter{margin-top:10px;padding:10px 16px;border-radius:12px;background:linear-gradient(90deg,#667eea,#764ba2);border:0;color:white;font-weight:700}
+  .enter{margin-top:10px;padding:10px 16px;border-radius:12px;background:linear-gradient(90deg,#667eea,#764ba2);border:0;color:white;font-weight:700;cursor:pointer;}
   .small{font-size:13px;opacity:0.8}
   .spinner{width:48px;height:48px;border-radius:50%;border:4px solid rgba(255,255,255,0.08);border-left-color:#90EE90;animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -27,8 +27,8 @@
   <footer>Tip: Allow camera permission when prompted.</footer>
 
   <script>
-    // Auto-redirect after short delay but allow manual entry
-    const goto = () => { window.location.href = 'index.html'; };
+    // Redirect ke ar_project.html, bukan ke index.html sendiri
+    const goto = () => { window.location.href = 'ar_project.html'; };
     document.getElementById('enterBtn').addEventListener('click', goto);
     setTimeout(goto, 1400);
   </script>
