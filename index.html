@@ -1,24 +1,289 @@
-<!DOCTYPE html>
-<html>
+
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>AR Permission Loader</title>
-    <style>
-        body { margin: 0; padding: 0; overflow: hidden; height: 100vh; width: 100vw; }
-        iframe {
-            border: none;
-            width: 100%;
-            height: 100%;
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
+<title>Markerless Floating WebAR — Demo</title>
+<style>
+  html,body { margin:0; height:100%; overflow:hidden; font-family:system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial; }
+  #ui { position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px; display:grid; grid-template-columns: repeat(3, 86px); gap:10px; z-index: 10; }
+  .btn { width:86px; height:46px; border-radius:12px; border: none; font-weight:600; background: rgba(255,255,255,0.92); box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
+  .btn:active { transform: translateY(1px); }
+  #info { position: absolute; left: 12px; top: 12px; background: rgba(0,0,0,0.45); color: white; padding:8px 12px; border-radius:10px; font-size:13px; z-index:10; }
+  canvas { display:block; }
+  #loader { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.6); color:white; padding:10px 14px; border-radius:8px; font-weight:600; z-index:20; display:none;}
+</style>
 </head>
 <body>
-    <iframe 
-        id="ar-frame"
-        src="https://nat-po.github.io/Final-Project-Health-Psych/ar_project.html" 
-        allow="camera; microphone; display-capture; autoplay; vr" 
-        frameborder="0" 
-        scrolling="no">
-    </iframe>
+<div id="info">UI: choose object → object appears floating ~1m in front. Gestures: 1-finger rotate, 2-finger drag to move, pinch to scale.</div>
+<div id="loader">Loading...</div>
+<div id="ui">
+  <button class="btn" onclick="setObject('flower')">Lotus</button>
+  <button class="btn" onclick="setObject('leaf')">Breathing Leaf</button>
+  <button class="btn" onclick="setObject('orb')">Glowing Orb</button>
+  <button class="btn" onclick="setObject('cloud')">Soft Cloud</button>
+  <button class="btn" onclick="setObject('wave')">Ocean Wave</button>
+</div>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import { ARButton } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js';
+
+let camera, scene, renderer;
+let currentObj = null;
+let reticle = null;
+let scaleFactor = 1;
+const loader = new GLTFLoader();
+const clock = new THREE.Clock();
+
+init();
+function init(){
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+
+  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local');
+  container.appendChild(renderer.domElement);
+
+  // light
+  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+  scene.add(light);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+  dir.position.set(0.5, 1, 0.25).normalize();
+  scene.add(dir);
+
+  // AR button (create immersive-ar session). If browser doesn't support immersive-ar, fallback to inline
+  document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: [], optionalFeatures: ['dom-overlay'], domOverlay: { root: document.body } }));
+
+  // initial floating object (invisible until placed)
+  // We'll create a parent pivot that is positioned relative to the camera
+  pivot = new THREE.Group();
+  pivot.position.set(0, 0, -1); // 1 meter forward in camera space initially
+  scene.add(pivot);
+
+  // handle gestures
+  setupGestures(renderer.domElement);
+
+  window.addEventListener('resize', onWindowResize, false);
+
+  renderer.setAnimationLoop(render);
+}
+
+function onWindowResize(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function render(timestamp, frame){
+  // position pivot in front of camera every frame so object is floating relative to camera
+  if (renderer.xr.isPresenting){
+    // make pivot follow camera with fixed distance
+    const cam = renderer.xr.getCamera(camera);
+    const camWorld = new THREE.Vector3();
+    cam.getWorldPosition(camWorld);
+    const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
+    const desiredPos = camWorld.clone().add(camDir.multiplyScalar(1.0)); // 1 meter ahead
+    pivot.position.copy(desiredPos);
+    // make pivot look at camera so "forward" is towards user (optional)
+    pivot.quaternion.copy(cam.quaternion);
+  } else {
+    // non-AR (preview): position pivot relative to camera
+    pivot.position.set(0,0,-1);
+    pivot.quaternion.identity();
+  }
+
+  // simple animation for some objects
+  const t = clock.getElapsedTime();
+  if (currentObj && currentObj.userData && currentObj.userData.animate){
+    currentObj.userData.animate(currentObj, t);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// --- object loading / creation ---
+async function setObject(name){
+  document.getElementById('loader').style.display = 'block';
+  // remove existing
+  if (currentObj){ pivot.remove(currentObj); currentObj = null; }
+  scaleFactor = 1;
+
+  if (name === 'flower'){
+    // load flower.glb from same folder
+    try {
+      const gltf = await loader.loadAsync('flower.glb');
+      currentObj = gltf.scene;
+      scaleToHeight(currentObj, 0.35); // scale roughly
+      pivot.add(currentObj);
+      currentObj.position.set(0, -0.15, 0); // adjust
+      currentObj.userData.animate = (obj,t)=>{ obj.rotation.y += 0.005; obj.position.y = -0.15 + Math.sin(t*1.2)*0.01; };
+    } catch(e){
+      console.error(e);
+      alert('Failed to load flower model. Make sure flower.glb is in same folder as index.html.');
+    }
+  } else if (name === 'leaf'){
+    // breathing leaf - simple plane that scales up/down
+    const g = new THREE.PlaneGeometry(0.4,0.25);
+    const mat = new THREE.MeshStandardMaterial({ color:0x3aa655, side:THREE.DoubleSide, metalness:0.1, roughness:0.7 });
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.rotation.x = -0.2;
+    mesh.position.set(0,0,0);
+    currentObj = new THREE.Group();
+    currentObj.add(mesh);
+    pivot.add(currentObj);
+    currentObj.userData.animate = (obj,t)=>{ const s = 1 + 0.06*Math.sin(t*1.6); obj.scale.set(s,s,s); };
+  } else if (name === 'orb'){
+    const g = new THREE.SphereGeometry(0.18, 32, 32);
+    const mat = new THREE.MeshStandardMaterial({ emissive:0xffcc88, emissiveIntensity:0.9, metalness:0.1, roughness:0.2 });
+    const mesh = new THREE.Mesh(g, mat);
+    const glow = new THREE.PointLight(0xffaa66, 1.2, 3);
+    const grp = new THREE.Group();
+    grp.add(mesh);
+    grp.add(glow);
+    currentObj = grp;
+    pivot.add(currentObj);
+    currentObj.userData.animate = (obj,t)=>{ obj.rotation.y += 0.01; obj.position.y = 0.05*Math.sin(t*1.4); };
+  } else if (name === 'cloud'){
+    // soft particle cloud — a few transparent sprites
+    const grp = new THREE.Group();
+    const spriteTex = generateCircleCanvasTexture(256);
+    for (let i=0;i<18;i++){
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: spriteTex, transparent:true, opacity:0.75 }));
+      s.scale.set(0.25 + Math.random()*0.25, 0.15 + Math.random()*0.2, 1);
+      s.position.set((Math.random()-0.5)*0.6, (Math.random()-0.5)*0.25, (Math.random()-0.5)*0.4);
+      grp.add(s);
+    }
+    currentObj = grp;
+    pivot.add(currentObj);
+    currentObj.userData.animate = (obj,t)=>{ obj.rotation.y += 0.002; };
+  } else if (name === 'wave'){
+    // simple ocean wave plane with sine vertex displacement
+    const geo = new THREE.PlaneGeometry(0.8,0.5,32,16);
+    const mat = new THREE.MeshStandardMaterial({ color:0x3178e6, metalness:0.1, roughness:0.6, transparent:true, opacity:0.95 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI/2.8;
+    mesh.position.y = -0.12;
+    currentObj = mesh;
+    pivot.add(currentObj);
+    currentObj.userData.animate = (obj,t)=>{
+      obj.geometry.attributes.position.needsUpdate = true;
+      const pos = obj.geometry.attributes.position;
+      for (let i=0;i<pos.count;i++){
+        const y = 0.02 * Math.sin(i*0.3 + t*3.0);
+        pos.setY(i, y);
+      }
+      pos.needsUpdate = true;
+    };
+  }
+
+  document.getElementById('loader').style.display = 'none';
+}
+
+// helper: scale to approximate height in meters
+function scaleToHeight(obj, meters){
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  if (size.y > 0) {
+    const s = meters / size.y;
+    obj.scale.setScalar(s);
+  }
+}
+
+function generateCircleCanvasTexture(size){
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grd = ctx.createRadialGradient(size/2,size/2,10,size/2,size/2,size/2);
+  grd.addColorStop(0,'rgba(255,255,255,0.95)');
+  grd.addColorStop(1,'rgba(200,220,255,0.02)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,size,size);
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+// --- Gesture controls (one-finger rotate, two-finger translate/pinch to scale) ---
+let ongoing = { touches: [], prevDist: 0, prevMid: null, isPointerDown:false, lastSingle: null };
+
+function setupGestures(dom){
+  dom.addEventListener('touchstart', onTouchStart, {passive:false});
+  dom.addEventListener('touchmove', onTouchMove, {passive:false});
+  dom.addEventListener('touchend', onTouchEnd, {passive:false});
+  dom.addEventListener('touchcancel', onTouchEnd, {passive:false});
+}
+
+function getTouchPos(touch){ return { x: touch.clientX, y: touch.clientY }; }
+function midPoint(a,b){ return { x: (a.x+b.x)/2, y: (a.y+b.y)/2 }; }
+function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+
+function onTouchStart(e){
+  if (!currentObj) return;
+  e.preventDefault();
+  const t = e.touches;
+  if (t.length === 1){
+    ongoing.lastSingle = getTouchPos(t[0]);
+    ongoing.isPointerDown = true;
+  } else if (t.length === 2){
+    const a = getTouchPos(t[0]), b = getTouchPos(t[1]);
+    ongoing.prevDist = dist(a,b);
+    ongoing.prevMid = midPoint(a,b);
+  }
+}
+
+function onTouchMove(e){
+  if (!currentObj) return;
+  e.preventDefault();
+  const t = e.touches;
+  if (t.length === 1 && ongoing.isPointerDown){
+    const p = getTouchPos(t[0]);
+    const dx = p.x - ongoing.lastSingle.x;
+    const dy = p.y - ongoing.lastSingle.y;
+    // rotate object by screen delta
+    currentObj.rotation.y += dx * 0.005;
+    currentObj.rotation.x += dy * 0.005;
+    ongoing.lastSingle = p;
+  } else if (t.length === 2){
+    const a = getTouchPos(t[0]), b = getTouchPos(t[1]);
+    const nd = dist(a,b);
+    const nmid = midPoint(a,b);
+    // pinch scale
+    const sf = nd / (ongoing.prevDist || nd);
+    scaleFactor *= sf;
+    currentObj.scale.setScalar(scaleFactor);
+    ongoing.prevDist = nd;
+
+    // two-finger drag -> move pivot laterally in camera space
+    if (ongoing.prevMid){
+      const md = { x: nmid.x - ongoing.prevMid.x, y: nmid.y - ongoing.prevMid.y };
+      // translate pivot based on screen delta
+      // small mapping from screen pixels to world units
+      const factor = 0.0016; // tuned for mobile
+      pivot.position.x += -md.x * factor;
+      pivot.position.y += md.y * factor;
+    }
+    ongoing.prevMid = nmid;
+  }
+}
+
+function onTouchEnd(e){
+  ongoing.isPointerDown = false;
+  ongoing.prevDist = 0;
+  ongoing.prevMid = null;
+}
+
+// initial load
+setObject('flower');
+
+</script>
 </body>
 </html>
