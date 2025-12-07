@@ -5,18 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,viewport-fit=cover">
 <title>AR Breathing Guide — Lotus</title>
 <style>
-/* CSS Styling */
-html,body{height:100%;margin:0;overflow:hidden;font-family:system-ui,Segoe UI,Roboto,Arial;background:#000}
-#uiTop{position:fixed;left:12px;top:12px;color:#fff;z-index:11}
-/* Kontrol di-hide saat load, akan ditampilkan saat AR dimulai */
-#controls{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px;z-index:11; display:none;} 
-.btn{padding:10px 14px;border-radius:12px;border:0;background:#fff;font-weight:700}
-#phase{position:fixed;left:50%;transform:translateX(-50%);top:78px;background:rgba(0,0,0,0.6);color:#00ff88;padding:8px 14px;border-radius:20px;z-index:11;font-weight:800}
-#loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.6);color:white;padding:10px 14px;border-radius:8px;z-index:20;display:none}
-footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
-/* Untuk visualisasi fase pernapasan (opsional) */
-.inhaling{color:#00ff88;}
-.exhaling{color:#ff8800;} 
+  html,body{height:100%;margin:0;overflow:hidden;font-family:system-ui,Segoe UI,Roboto,Arial;background:#000}
+  #uiTop{position:fixed;left:12px;top:12px;color:#fff;z-index:11}
+  #controls{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;display:flex;gap:10px;z-index:11}
+  .btn{padding:10px 14px;border-radius:12px;border:0;background:#fff;font-weight:700}
+  #phase{position:fixed;left:50%;transform:translateX(-50%);top:78px;background:rgba(0,0,0,0.6);color:#00ff88;padding:8px 14px;border-radius:20px;z-index:11;font-weight:800}
+  #loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.6);color:white;padding:10px 14px;border-radius:8px;z-index:20;display:none}
+  footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 </style>
 </head>
 <body>
@@ -25,14 +20,13 @@ footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 <div id="loader">Loading model…</div>
 
 <div id="controls">
-  <button class="btn" id="pauseBtn">⏸ Pause</button>
-  <button class="btn" id="slower">⏪ Slower</button>
-  <button class="btn" id="faster">⏩ Faster</button>
-  <button class="btn" id="audioBtn">🔈 Audio</button>
+  <button class="btn" id="pauseBtn">⏸ Pause</button>
+  <button class="btn" id="slower">⏪ Slower</button>
+  <button class="btn" id="faster">⏩ Faster</button>
+  <button class="btn" id="audioBtn">🔈 Audio</button>
 </div>
 
 <audio id="breathAudio" src="assets/breathing.mp3" preload="auto"></audio>
-
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
@@ -47,120 +41,88 @@ const loader = new GLTFLoader();
 
 init();
 function init(){
-  const container = document.createElement('div'); document.body.appendChild(container);
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
+  const container = document.createElement('div'); document.body.appendChild(container);
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
 
-  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-  renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
-  container.appendChild(renderer.domElement);
+  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+  renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
+  container.appendChild(renderer.domElement);
 
-  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1); scene.add(light);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(0.5,1,0.25).normalize(); scene.add(dir);
+  const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1); scene.add(light);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(0.5,1,0.25).normalize(); scene.add(dir);
 
-  // --- PERBAIKAN: ARButton Dibuat di sini dan akan Memicu Izin Kamera ---
-  document.body.appendChild(ARButton.createButton(renderer, { 
-    requiredFeatures: ['hit-test'], 
-    optionalFeatures: ['dom-overlay'], 
-    domOverlay: { root: document.body } 
-  }));
+  document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: [], optionalFeatures: ['dom-overlay'], domOverlay: { root: document.body } }));
 
-  pivot = new THREE.Group(); pivot.position.set(0,0,-1); scene.add(pivot);
+  pivot = new THREE.Group(); pivot.position.set(0,0,-1); scene.add(pivot);
 
-  setupGestures(renderer.domElement);
-  window.addEventListener('resize', ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+  setupGestures(renderer.domElement);
+  window.addEventListener('resize', ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
-  // load flower model
-  document.getElementById('loader').style.display = 'block';
-  loader.load('assets/flower.glb', gltf => {
-    flower = gltf.scene;
-    scaleToHeight(flower, 0.35);
-    pivot.add(flower);
-    flower.position.set(0,-0.15,0);
-    document.getElementById('loader').style.display = 'none';
-    
-    // Opsional: Tampilkan controls segera setelah model dimuat (jika AR belum dimulai)
-    // document.getElementById('controls').style.display = 'flex'; 
-  }, undefined, err => {
-    console.error(err);
-    document.getElementById('loader').textContent = 'Failed to load flower.glb';
-  });
+  // load flower model
+  document.getElementById('loader').style.display = 'block';
+  loader.load('assets/flower.glb', gltf => {
+    flower = gltf.scene;
+    scaleToHeight(flower, 0.35);
+    pivot.add(flower);
+    flower.position.set(0,-0.15,0);
+    document.getElementById('loader').style.display = 'none';
+  }, undefined, err => {
+    console.error(err);
+    document.getElementById('loader').textContent = 'Failed to load flower.glb';
+  });
 
-  // --- PERBAIKAN UTAMA: Mengaktifkan Audio dan UI saat Sesi AR Dimulai ---
-  renderer.xr.addEventListener('sessionstart', () => {
-    // Tampilkan kontrol UI
-    document.getElementById('controls').style.display = 'flex';
-    
-    // Putar Audio (Memanfaatkan interaksi pengguna yang sudah terjadi)
-    const audio = document.getElementById('breathAudio');
-    audio.play().catch(()=>{});
-    // Setting _enabled untuk kontrol tombol audio
-    audio._enabled = true; 
-  });
-
-  // Opsional: Bersihkan UI saat sesi AR berakhir
-  renderer.xr.addEventListener('sessionend', () => {
-    document.getElementById('controls').style.display = 'none';
-    document.getElementById('breathAudio').pause();
-    isPaused = true;
-    pauseBtn.textContent = '▶ Resume';
-  });
-
-
-  renderer.setAnimationLoop(render);
+  renderer.setAnimationLoop(render);
 }
 
 function render(){
-  if (renderer.xr.isPresenting){
-    const cam = renderer.xr.getCamera(camera);
-    const camWorld = new THREE.Vector3(); cam.getWorldPosition(camWorld);
-    const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
-    const desiredPos = camWorld.clone().add(camDir.multiplyScalar(1.0));
-    pivot.position.copy(desiredPos);
-    pivot.quaternion.copy(cam.quaternion);
-  } else {
-    // Jika AR belum dimulai, objek tetap di depan kamera non-AR
-    pivot.position.set(0,0,-1); pivot.quaternion.identity();
-  }
+  if (renderer.xr.isPresenting){
+    const cam = renderer.xr.getCamera(camera);
+    const camWorld = new THREE.Vector3(); cam.getWorldPosition(camWorld);
+    const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
+    const desiredPos = camWorld.clone().add(camDir.multiplyScalar(1.0));
+    pivot.position.copy(desiredPos);
+    pivot.quaternion.copy(cam.quaternion);
+  } else {
+    pivot.position.set(0,0,-1); pivot.quaternion.identity();
+  }
 
-  if (flower && !isPaused){
-    const t = clock.getElapsedTime() * speed;
-    // breathing scale animation (inhale/exhale)
-    const s = 1 + 0.08 * Math.sin(t * Math.PI); 
-    flower.scale.setScalar(s);
-    
-    // determine phase (inhale/exhale) by sign of sin
-    const sinv = Math.sin(t * Math.PI);
-    const newPhase = sinv > 0.01 ? 'inhale' : (sinv < -0.01 ? 'exhale' : phase); // Hindari perubahan cepat di titik 0
-    if (newPhase !== phase){ phase = newPhase; updatePhaseUI(); }
-  }
+  if (flower && !isPaused){
+    const t = clock.getElapsedTime() * speed;
+    // breathing scale animation (inhale/exhale)
+    const s = 1 + 0.08 * Math.sin(t * Math.PI); // smooth breathing
+    flower.scale.setScalar(s);
+    // determine phase (inhale/exhale) by sign of sin
+    const sinv = Math.sin(t * Math.PI);
+    const newPhase = sinv > 0 ? 'inhale' : 'exhale';
+    if (newPhase !== phase){ phase = newPhase; updatePhaseUI(); }
+  }
 
-  renderer.render(scene, camera);
+  renderer.render(scene, camera);
 }
 
 function scaleToHeight(obj, meters){
-  const box = new THREE.Box3().setFromObject(obj);
-  const size = new THREE.Vector3(); box.getSize(size);
-  if (size.y > 0){ const s = meters / size.y; obj.scale.setScalar(s); }
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3(); box.getSize(size);
+  if (size.y > 0){ const s = meters / size.y; obj.scale.setScalar(s); }
 }
 
 function updatePhaseUI(){
-  const el = document.getElementById('phase');
-  el.textContent = phase.toUpperCase();
-  el.className = phase === 'inhale' ? 'inhaling' : 'exhaling';
+  const el = document.getElementById('phase');
+  el.textContent = phase.toUpperCase();
+  el.className = phase === 'inhale' ? 'inhaling' : 'exhaling';
 }
 
 // basic gesture handlers (rotate, translate, pinch)
 let ongoing = { prevDist:0, prevMid:null, lastSingle:null, isPointerDown:false, scaleFactor:1 };
 function setupGestures(dom){
-  dom.addEventListener('touchstart', e => { if (!flower) return; e.preventDefault(); const t = e.touches; if (t.length === 1){ ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY}; ongoing.isPointerDown=true; } else if (t.length===2){ ongoing.prevDist = dist(t[0],t[1]); ongoing.prevMid = mid(t[0],t[1]); } }, {passive:false});
-  dom.addEventListener('touchmove', e => { if (!flower) return; e.preventDefault(); const t = e.touches; if (t.length===1 && ongoing.isPointerDown){ const p={x:t[0].clientX,y:t[0].clientY}; const dx = p.x - ongoing.lastSingle.x; const dy = p.y - ongoing.lastSingle.y; flower.rotation.y += dx*0.005; flower.rotation.x += dy*0.005; ongoing.lastSingle = p; } else if (t.length===2){ const nd = dist(t[0],t[1]); const nmid = mid(t[0],t[1]); const sf = nd/(ongoing.prevDist||nd); ongoing.scaleFactor *= sf; flower.scale.setScalar(ongoing.scaleFactor); ongoing.prevDist = nd; if (ongoing.prevMid){ const mdx = nmid.x - ongoing.prevMid.x; const mdy = nmid.y - ongoing.prevMid.y; const factor = 0.0016; pivot.position.x += -mdx * factor; pivot.position.y += mdy * factor; } ongoing.prevMid = nmid; } }, {passive:false});
-  dom.addEventListener('touchend', e => { ongoing.isPointerDown=false; ongoing.prevDist=0; ongoing.prevMid=null; }, {passive:false});
+  dom.addEventListener('touchstart', e => { if (!flower) return; e.preventDefault(); const t = e.touches; if (t.length === 1){ ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY}; ongoing.isPointerDown=true; } else if (t.length===2){ ongoing.prevDist = dist(t[0],t[1]); ongoing.prevMid = mid(t[0],t[1]); } }, {passive:false});
+  dom.addEventListener('touchmove', e => { if (!flower) return; e.preventDefault(); const t = e.touches; if (t.length===1 && ongoing.isPointerDown){ const p={x:t[0].clientX,y:t[0].clientY}; const dx = p.x - ongoing.lastSingle.x; const dy = p.y - ongoing.lastSingle.y; flower.rotation.y += dx*0.005; flower.rotation.x += dy*0.005; ongoing.lastSingle = p; } else if (t.length===2){ const nd = dist(t[0],t[1]); const nmid = mid(t[0],t[1]); const sf = nd/(ongoing.prevDist||nd); ongoing.scaleFactor *= sf; flower.scale.setScalar(ongoing.scaleFactor); ongoing.prevDist = nd; if (ongoing.prevMid){ const mdx = nmid.x - ongoing.prevMid.x; const mdy = nmid.y - ongoing.prevMid.y; const factor = 0.0016; pivot.position.x += -mdx * factor; pivot.position.y += mdy * factor; } ongoing.prevMid = nmid; } }, {passive:false});
+  dom.addEventListener('touchend', e => { ongoing.isPointerDown=false; ongoing.prevDist=0; ongoing.prevMid=null; }, {passive:false});
 }
 function mid(a,b){ return {x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2}; }
-// --- PERBAIKAN BUG: Perbaikan typo di b.clientClientX ---
-function dist(a,b){ const dx=a.clientX-b.clientX; const dy=a.clientY-b.clientY; return Math.hypot(dx,dy); } 
+function dist(a,b){ const dx=a.clientX-b.clientClientX||a.clientX-b.clientX; const dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
 
 // controls: pause, speed, audio
 const pauseBtn = document.getElementById('pauseBtn');
@@ -170,22 +132,18 @@ const aBtn = document.getElementById('audioBtn');
 const audio = document.getElementById('breathAudio');
 
 pauseBtn.addEventListener('click', ()=>{
-  isPaused = !isPaused;
-  pauseBtn.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
-  // Pastikan audio hanya dimainkan jika AR tidak di-pause DAN audio diaktifkan
-  if (isPaused) audio.pause(); else if (audio._enabled) audio.play().catch(()=>{}); 
+  isPaused = !isPaused;
+  pauseBtn.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+  if (isPaused) audio.pause(); else if (audio._enabled) audio.play().catch(()=>{});
 });
 sBtn.addEventListener('click', ()=>{ speed = Math.max(0.5, speed - 0.25); });
 fBtn.addEventListener('click', ()=>{ speed = Math.min(2.0, speed + 0.25); });
 aBtn.addEventListener('click', ()=>{
-  audio._enabled = !audio._enabled;
-  aBtn.textContent = audio._enabled ? '🔊 Audio' : '🔇 Audio OFF';
-  if (audio._enabled && !isPaused) audio.currentTime = 0, audio.play().catch(()=>{});
-  else audio.pause();
+  audio._enabled = !audio._enabled;
+  aBtn.textContent = audio._enabled ? '🔊 Audio' : '🔇 Audio OFF';
+  if (audio._enabled && !isPaused) audio.currentTime = 0, audio.play().catch(()=>{});
+  else audio.pause();
 });
-
-// Setting default audio state for control (hanya untuk internal tracking)
-audio._enabled = true;
 
 </script>
 <footer>Tip: Use Chrome (Android) for best WebXR support. Allow camera access when prompted.</footer>
