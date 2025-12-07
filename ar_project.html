@@ -11,6 +11,7 @@
   .btn{padding:10px 14px;border-radius:12px;border:0;background:#fff;font-weight:700}
   #phase{position:fixed;left:50%;transform:translateX(-50%);top:78px;background:rgba(0,0,0,0.6);color:#00ff88;padding:8px 14px;border-radius:20px;z-index:11;font-weight:800}
   #loader{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.6);color:white;padding:10px 14px;border-radius:8px;z-index:20;display:none}
+  #startAR{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);padding:14px 20px;font-size:18px;border-radius:12px;border:none;background:#00ff88;color:#000;z-index:15;cursor:pointer;}
   footer{position:fixed;left:12px;bottom:12px;color:#aaa;font-size:12px}
 </style>
 </head>
@@ -26,7 +27,10 @@
   <button class="btn" id="audioBtn">🔈 Audio</button>
 </div>
 
+<button id="startAR">Start AR</button>
+
 <audio id="breathAudio" src="assets/breathing.mp3" preload="auto"></audio>
+
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
@@ -37,32 +41,37 @@ let clock = new THREE.Clock();
 let isPaused = false;
 let speed = 1.0;
 let phase = 'inhale';
-const loader = new GLTFLoader();
+const loaderGLTF = new GLTFLoader();
 
-init();
-function init(){
+initBasicScene();
+
+function initBasicScene(){
   const container = document.createElement('div'); document.body.appendChild(container);
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
 
   renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-  renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
+  renderer.setPixelRatio(window.devicePixelRatio); 
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local');
   container.appendChild(renderer.domElement);
 
   const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1); scene.add(light);
   const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(0.5,1,0.25).normalize(); scene.add(dir);
 
-  document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: [], optionalFeatures: ['dom-overlay'], domOverlay: { root: document.body } }));
-
   pivot = new THREE.Group(); pivot.position.set(0,0,-1); scene.add(pivot);
 
   setupGestures(renderer.domElement);
-  window.addEventListener('resize', ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+  window.addEventListener('resize', ()=>{ 
+    camera.aspect = window.innerWidth/window.innerHeight; 
+    camera.updateProjectionMatrix(); 
+    renderer.setSize(window.innerWidth, window.innerHeight); 
+  });
 
   // load flower model
   document.getElementById('loader').style.display = 'block';
-  loader.load('assets/flower.glb', gltf => {
+  loaderGLTF.load('assets/flower.glb', gltf => {
     flower = gltf.scene;
     scaleToHeight(flower, 0.35);
     pivot.add(flower);
@@ -76,6 +85,19 @@ function init(){
   renderer.setAnimationLoop(render);
 }
 
+// --- Start AR button ---
+document.getElementById('startAR').addEventListener('click', ()=>{
+  document.body.removeChild(document.getElementById('startAR'));
+  document.body.appendChild(
+    ARButton.createButton(renderer, {
+      requiredFeatures: ['hit-test'], // ini bikin browser minta izin kamera
+      optionalFeatures: ['dom-overlay'],
+      domOverlay: { root: document.body }
+    })
+  );
+});
+
+// --- Render loop ---
 function render(){
   if (renderer.xr.isPresenting){
     const cam = renderer.xr.getCamera(camera);
@@ -85,15 +107,15 @@ function render(){
     pivot.position.copy(desiredPos);
     pivot.quaternion.copy(cam.quaternion);
   } else {
-    pivot.position.set(0,0,-1); pivot.quaternion.identity();
+    pivot.position.set(0,0,-1); 
+    pivot.quaternion.identity();
   }
 
   if (flower && !isPaused){
     const t = clock.getElapsedTime() * speed;
-    // breathing scale animation (inhale/exhale)
-    const s = 1 + 0.08 * Math.sin(t * Math.PI); // smooth breathing
+    const s = 1 + 0.08 * Math.sin(t * Math.PI);
     flower.scale.setScalar(s);
-    // determine phase (inhale/exhale) by sign of sin
+
     const sinv = Math.sin(t * Math.PI);
     const newPhase = sinv > 0 ? 'inhale' : 'exhale';
     if (newPhase !== phase){ phase = newPhase; updatePhaseUI(); }
@@ -114,17 +136,48 @@ function updatePhaseUI(){
   el.className = phase === 'inhale' ? 'inhaling' : 'exhaling';
 }
 
-// basic gesture handlers (rotate, translate, pinch)
+// --- Gesture controls ---
 let ongoing = { prevDist:0, prevMid:null, lastSingle:null, isPointerDown:false, scaleFactor:1 };
 function setupGestures(dom){
-  dom.addEventListener('touchstart', e => { if (!flower) return; e.preventDefault(); const t = e.touches; if (t.length === 1){ ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY}; ongoing.isPointerDown=true; } else if (t.length===2){ ongoing.prevDist = dist(t[0],t[1]); ongoing.prevMid = mid(t[0],t[1]); } }, {passive:false});
-  dom.addEventListener('touchmove', e => { if (!flower) return; e.preventDefault(); const t = e.touches; if (t.length===1 && ongoing.isPointerDown){ const p={x:t[0].clientX,y:t[0].clientY}; const dx = p.x - ongoing.lastSingle.x; const dy = p.y - ongoing.lastSingle.y; flower.rotation.y += dx*0.005; flower.rotation.x += dy*0.005; ongoing.lastSingle = p; } else if (t.length===2){ const nd = dist(t[0],t[1]); const nmid = mid(t[0],t[1]); const sf = nd/(ongoing.prevDist||nd); ongoing.scaleFactor *= sf; flower.scale.setScalar(ongoing.scaleFactor); ongoing.prevDist = nd; if (ongoing.prevMid){ const mdx = nmid.x - ongoing.prevMid.x; const mdy = nmid.y - ongoing.prevMid.y; const factor = 0.0016; pivot.position.x += -mdx * factor; pivot.position.y += mdy * factor; } ongoing.prevMid = nmid; } }, {passive:false});
+  dom.addEventListener('touchstart', e => { 
+    if (!flower) return; e.preventDefault(); 
+    const t = e.touches; 
+    if (t.length === 1){ ongoing.lastSingle={x:t[0].clientX,y:t[0].clientY}; ongoing.isPointerDown=true; } 
+    else if (t.length===2){ ongoing.prevDist = dist(t[0],t[1]); ongoing.prevMid = mid(t[0],t[1]); } 
+  }, {passive:false});
+
+  dom.addEventListener('touchmove', e => { 
+    if (!flower) return; e.preventDefault(); 
+    const t = e.touches; 
+    if (t.length===1 && ongoing.isPointerDown){ 
+      const p={x:t[0].clientX,y:t[0].clientY}; 
+      const dx = p.x - ongoing.lastSingle.x; const dy = p.y - ongoing.lastSingle.y; 
+      flower.rotation.y += dx*0.005; flower.rotation.x += dy*0.005; 
+      ongoing.lastSingle = p; 
+    } else if (t.length===2){ 
+      const nd = dist(t[0],t[1]); 
+      const nmid = mid(t[0],t[1]); 
+      const sf = nd/(ongoing.prevDist||nd); 
+      ongoing.scaleFactor *= sf; 
+      flower.scale.setScalar(ongoing.scaleFactor); 
+      ongoing.prevDist = nd; 
+      if (ongoing.prevMid){ 
+        const mdx = nmid.x - ongoing.prevMid.x; const mdy = nmid.y - ongoing.prevMid.y; 
+        const factor = 0.0016; 
+        pivot.position.x += -mdx * factor; 
+        pivot.position.y += mdy * factor; 
+      } 
+      ongoing.prevMid = nmid; 
+    } 
+  }, {passive:false});
+
   dom.addEventListener('touchend', e => { ongoing.isPointerDown=false; ongoing.prevDist=0; ongoing.prevMid=null; }, {passive:false});
 }
-function mid(a,b){ return {x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2}; }
-function dist(a,b){ const dx=a.clientX-b.clientClientX||a.clientX-b.clientX; const dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
 
-// controls: pause, speed, audio
+function mid(a,b){ return {x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2}; }
+function dist(a,b){ const dx=a.clientX-b.clientX; const dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
+
+// --- Controls: pause, speed, audio ---
 const pauseBtn = document.getElementById('pauseBtn');
 const sBtn = document.getElementById('slower');
 const fBtn = document.getElementById('faster');
