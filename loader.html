@@ -1,36 +1,388 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>AR Breathing — Loading</title>
-<style>
-  html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:#050714;color:white}
-  .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
-  h1{font-size:22px;margin:0}
-  p{opacity:0.85;margin:0}
-  .enter{margin-top:10px;padding:10px 16px;border-radius:12px;background:linear-gradient(90deg,#667eea,#764ba2);border:0;color:white;font-weight:700;cursor:pointer;}
-  .small{font-size:13px;opacity:0.8}
-  .spinner{width:48px;height:48px;border-radius:50%;border:4px solid rgba(255,255,255,0.08);border-left-color:#90EE90;animation:spin 1s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  footer{position:fixed;left:12px;bottom:12px;font-size:12px;opacity:0.6}
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="spinner" aria-hidden="true"></div>
-    <h1>Mindfulness AR — Breathing Guide</h1>
-    <p class="small">Preparing markerless AR experience… (no HIRO marker needed)</p>
-    <button class="enter" id="enterBtn">Enter AR demo</button>
-    <p class="small">If nothing happens, make sure your site is served via HTTPS (GitHub Pages / Netlify) and open in Chrome on Android for best WebXR support.</p>
-  </div>
-  <footer>Tip: Allow camera permission when prompted.</footer>
+    <meta charset="UTF-8">
+    <title>AR Breathing Guide</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <script>
-    // Redirect ke ar_project.html, bukan ke index.html
-    const goto = () => { window.location.href = 'ar_project.html'; };
-    document.getElementById('enterBtn').addEventListener('click', goto);
-    setTimeout(goto, 1400); // Auto-redirect setelah 1.4 detik
-  </script>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://jeromeetienne.github.io/AR.js/aframe/build/aframe-ar.min.js"></script>
+    <script src="js/breathing.js"></script>
+    <script src="js/particles.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #000;
+        }
+
+        #ar-scene {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Top instruction panel */
+        #instruction-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+            text-align: center;
+            z-index: 1000;
+            color: white;
+            font-size: 18px;
+            font-weight: 500;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        #status {
+            font-size: 14px;
+            margin-top: 8px;
+            opacity: 0.9;
+            color: #90EE90;
+        }
+
+        /* Control panel - bottom */
+        #control-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            z-index: 1000;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 18px;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            min-width: 100px;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        #pause-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        #pause-btn:hover {
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        #pause-btn.paused {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        #speed-slower {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        #speed-slower:hover {
+            box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+        }
+
+        #speed-faster {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: #333;
+        }
+
+        #speed-faster:hover {
+            box-shadow: 0 6px 20px rgba(250, 112, 154, 0.4);
+        }
+
+        #audio-btn {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+        }
+
+        #audio-btn:hover {
+            box-shadow: 0 6px 20px rgba(168, 237, 234, 0.4);
+        }
+
+        #audio-btn.active {
+            background: linear-gradient(135deg, #feca57 0%, #48dbfb 100%);
+        }
+
+        #speed-display {
+            position: fixed;
+            bottom: 90px;
+            right: 15px;
+            background: rgba(0,0,0,0.6);
+            color: #90EE90;
+            padding: 10px 15px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 1000;
+            border: 1px solid rgba(144, 238, 144, 0.3);
+        }
+
+        /* Breathing phase indicator */
+        #breathing-phase {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: #00ff88;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            z-index: 999;
+            border: 2px solid #00ff88;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Animation for breathing phase */
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
+
+        #breathing-phase.inhaling {
+            animation: pulse 4s infinite;
+            border-color: #ff6b9d;
+            color: #ff6b9d;
+        }
+
+        #breathing-phase.exhaling {
+            animation: pulse 4s infinite;
+            border-color: #00bfff;
+            color: #00bfff;
+        }
+
+        /* Marker detection hint */
+        #hint {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 165, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 999;
+            display: none;
+        }
+
+        #hint.show {
+            display: block;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(-10px); }
+        }
+    </style>
+</head>
+
+<body>
+    <a-scene 
+        id="ar-scene"
+        embedded 
+        arjs='sourceType: webcam;'
+        vr-mode-ui="enabled: false">
+
+        <a-marker preset="hiro" id="hiro-marker">
+            <a-entity 
+                id="flower-guide" 
+                gltf-model="assets/flower.glb" 
+                position="0 0.1 0" 
+                scale="0.2 0.2 0.2"
+                breathing-animation
+                breathing-particles="particleCount: 12; color: #00ff88"> 
+            </a-entity>
+
+            <a-text 
+                id="breathing-text"
+                value="🌸 BREATHE 🌸" 
+                align="center" 
+                position="0 0.5 0" 
+                color="#00ff88" 
+                scale="0.3 0.3 0.3"
+                animation="property: scale; from: 0.3 0.3 0.3; to: 0.35 0.35 0.35; dur: 4000; easing: easeInOutCubic; loop: true">
+            </a-text>
+        </a-marker>
+
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <!-- UI Elements -->
+    <div id="instruction-panel">
+        Point your camera at the <strong>'HIRO'</strong> marker to start the guide
+        <div id="status">📹 Waiting for marker...</div>
+    </div>
+
+    <div id="breathing-phase">INHALE</div>
+    <div id="hint">⬆️ Point camera at HIRO marker ⬆️</div>
+    <div id="speed-display">Speed: 1.0x</div>
+
+    <div id="control-panel">
+        <button class="btn" id="pause-btn">⏸ Pause</button>
+        <button class="btn" id="speed-slower">⏪ Slower</button>
+        <button class="btn" id="speed-faster">⏩ Faster</button>
+        <button class="btn" id="audio-btn">🔊 Audio</button>
+    </div>
+
+    <audio id="breathingAudio" src="assets/breathing.mp3" preload="auto"></audio>
+
+    <script>
+        // Initialize the AR experience
+        const scene = document.querySelector('a-scene');
+        const flowerGuide = document.getElementById('flower-guide');
+        const pauseBtn = document.getElementById('pause-btn');
+        const speedSlower = document.getElementById('speed-slower');
+        const speedFaster = document.getElementById('speed-faster');
+        const audioBtn = document.getElementById('audio-btn');
+        const audioElement = document.getElementById('breathingAudio');
+        const markerElement = document.getElementById('hiro-marker');
+        const breathingPhaseDisplay = document.getElementById('breathing-phase');
+        const statusDisplay = document.getElementById('status');
+        const speedDisplay = document.getElementById('speed-display');
+        const hint = document.getElementById('hint');
+
+        let currentSpeed = 1.0;
+        let isAudioEnabled = false;
+        let isPaused = false;
+        let markerDetected = false;
+        let breathingPhase = 'inhale';
+
+        // Detect marker
+        markerElement.addEventListener('markerFound', () => {
+            markerDetected = true;
+            hint.classList.remove('show');
+            statusDisplay.textContent = '✅ Marker detected - breathe along!';
+            statusDisplay.style.color = '#90EE90';
+        });
+
+        markerElement.addEventListener('markerLost', () => {
+            markerDetected = false;
+            hint.classList.add('show');
+            statusDisplay.textContent = '❌ Marker lost - point camera back!';
+            statusDisplay.style.color = '#ff6b6b';
+        });
+
+        // Pause/Resume
+        pauseBtn.addEventListener('click', () => {
+            isPaused = !isPaused;
+            const breathingComponent = flowerGuide.components['breathing-animation'];
+            
+            if (isPaused) {
+                breathingComponent.pause();
+                pauseBtn.classList.add('paused');
+                pauseBtn.textContent = '▶ Resume';
+                if (isAudioEnabled) audioElement.pause();
+            } else {
+                breathingComponent.resume();
+                pauseBtn.classList.remove('paused');
+                pauseBtn.textContent = '⏸ Pause';
+                if (isAudioEnabled) audioElement.play().catch(e => console.log('Audio play prevented'));
+            }
+        });
+
+        // Speed controls
+        speedSlower.addEventListener('click', () => {
+            if (currentSpeed > 0.5) {
+                currentSpeed = Math.max(0.5, currentSpeed - 0.25);
+                updateSpeed();
+            }
+        });
+
+        speedFaster.addEventListener('click', () => {
+            if (currentSpeed < 2.0) {
+                currentSpeed = Math.min(2.0, currentSpeed + 0.25);
+                updateSpeed();
+            }
+        });
+
+        function updateSpeed() {
+            const breathingComponent = flowerGuide.components['breathing-animation'];
+            breathingComponent.setSpeed(currentSpeed);
+            speedDisplay.textContent = `Speed: ${currentSpeed.toFixed(2)}x`;
+        }
+
+        // Audio toggle
+        audioBtn.addEventListener('click', () => {
+            isAudioEnabled = !isAudioEnabled;
+            audioBtn.classList.toggle('active');
+            audioElement._audioEnabled = isAudioEnabled;
+            
+            if (isAudioEnabled && !isPaused) {
+                // Start audio with the breathing cycle
+                audioElement.currentTime = 0;
+                audioElement.play().catch(e => console.log('Audio play prevented'));
+                audioBtn.textContent = '🔊 Audio ON';
+            } else {
+                audioElement.pause();
+                audioBtn.textContent = '🔇 Audio OFF';
+            }
+        });
+
+        // Update breathing phase indicator
+        function updateBreathingPhase() {
+            // Simple toggle every 4 seconds
+            const now = Date.now();
+            const cycle = (now / 4000) % 2;
+            const newPhase = cycle < 1 ? 'inhale' : 'exhale';
+            
+            if (newPhase !== breathingPhase && !isPaused) {
+                breathingPhase = newPhase;
+                breathingPhaseDisplay.textContent = breathingPhase.toUpperCase();
+                breathingPhaseDisplay.className = breathingPhase === 'inhale' ? 'inhaling' : 'exhaling';
+            }
+            
+            requestAnimationFrame(updateBreathingPhase);
+        }
+
+        // Start phase updates
+        updateBreathingPhase();
+
+        // Show hint on load
+        hint.classList.add('show');
+
+        // Mobile-friendly adjustments
+        if (window.innerWidth < 768) {
+            document.getElementById('control-panel').style.gap = '8px';
+            document.querySelectorAll('.btn').forEach(btn => {
+                btn.style.padding = '10px 14px';
+                btn.style.fontSize = '12px';
+                btn.style.minWidth = '80px';
+            });
+        }
+
+        console.log('✅ AR Breathing Guide loaded successfully!');
+        console.log('👉 Point your camera at the HIRO marker to begin');
+    </script>
 </body>
+
 </html>
